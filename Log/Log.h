@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <shlwapi.h>
 #include <clocale>
@@ -24,7 +25,53 @@ namespace Log
         Critical,
     };
 
-    class ConsoleLogHandler
+    class Locker
+    {
+    public:
+        virtual ~Locker() {};
+        void Lock() = 0;
+        void Unlock() = 0;
+    };
+
+    template<class Locker>
+    class LogHandler
+    {
+        Locker locker_;
+        class LockerHolder
+        {
+            Locker& locker_;
+        public:
+            LockerHolder(Locker& locker) : locker_(locker)
+            {
+                locker_.Lock();
+            }
+
+            ~LockerHolder(Locker& locker)
+            {
+                locker_.Unlock();
+            }
+        };
+    public:
+        void Handle(std::string message, LogLevel)
+        {
+           LockerHolder lock;
+           lock;
+           handle(message);
+        }
+
+        LogHandler()
+        {
+        }
+
+        ~LogHandler()
+        {
+        }
+
+    protected:
+        virtual void handle(std::string message) = 0;
+    };
+
+    class ConsoleLogHandler : public LogHandler
     {
     public:
         ConsoleLogHandler()
@@ -37,10 +84,11 @@ namespace Log
             // FreeConsole();
         }
 
-    public:
-        void Handle(std::string message, LogLevel)  
+    protected:
+        virtual void handle(std::string message)  
         {
             std::cout << message;
+            std::cout << std::flush;
         }
 
     private:
@@ -67,8 +115,46 @@ namespace Log
         }
     };
 
+    class FileLogHandler : public LogHandler
+    {
+    public:
+        FileLogHandler()
+        {
+            setlocale(LC_ALL, "chs");
 
-    template<typename Handler = ConsoleLogHandler>
+            char lpLogName[MAX_PATH] = {0};
+            HMODULE hModule = NULL;
+            GetModuleFileName(hModule, lpLogName, MAX_PATH);
+            PathRenameExtension(lpLogName, ".log");
+
+            out.open(lpLogName, std::ios::app | std::ios::binary);
+
+        }
+
+        virtual ~FileLogHandler()
+        {
+            out.close();
+        }
+
+    protected:
+        void handle(std::string message)  
+        {
+            write(message);
+        }
+
+
+    private:
+        void write(std::string message)
+        {
+            out.write(message.c_str(), message.length());
+            out << std::flush;
+        }
+
+    private:
+        std::ofstream out;
+    };
+
+    template<typename Handler = FileLogHandler>
     class Logger {
         std::ostringstream stringstream_;
         LogLevel level_;
@@ -131,5 +217,8 @@ namespace Log
             return currHandler;
         }
     };
-}
-#define Logger Log::Logger<>
+};
+
+#define ConsoleLogger Log::Logger<Log::ConsoleLogHandler>
+#define FileLogger Log::Logger<Log::FileLogHandler>
+
