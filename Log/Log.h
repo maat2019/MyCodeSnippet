@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Locker.h"
 #include <string>
 #include <cstdio>
 #include <cstdlib>
@@ -25,36 +26,13 @@ namespace Log
         Critical,
     };
 
-    class Locker
-    {
-    public:
-        virtual ~Locker() {};
-        void Lock() = 0;
-        void Unlock() = 0;
-    };
-
     template<class Locker>
     class LogHandler
     {
-        Locker locker_;
-        class LockerHolder
-        {
-            Locker& locker_;
-        public:
-            LockerHolder(Locker& locker) : locker_(locker)
-            {
-                locker_.Lock();
-            }
-
-            ~LockerHolder(Locker& locker)
-            {
-                locker_.Unlock();
-            }
-        };
     public:
         void Handle(std::string message, LogLevel)
         {
-           LockerHolder lock;
+           Locker lock;
            lock;
            handle(message);
         }
